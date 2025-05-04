@@ -1,0 +1,553 @@
+{% extends "layout.html" %}
+
+{% block title %}Team Profile{% endblock %}
+
+{% block content %}
+<div class="row">
+    <div class="col-12">
+        <div class="card">
+            <div class="card-header d-flex justify-content-between align-items-center">
+                <h5 class="mb-0" id="team-name">Team Profile</h5>
+                <small>Last updated: <span id="last-updated">Loading...</span></small>
+            </div>
+            <div class="card-body">
+                <div id="team-info">
+                    <div class="text-center py-5">
+                        <div class="spinner-border text-primary" role="status">
+                            <span class="visually-hidden">Loading...</span>
+                        </div>
+                        <p class="mt-3">Loading team information...</p>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<div class="row mt-4">
+    <div class="col-md-6">
+        <div class="card">
+            <div class="card-header">
+                <h5 class="mb-0">Upcoming Matches</h5>
+            </div>
+            <div class="card-body">
+                <div id="upcoming-matches">
+                    <div class="text-center py-3">
+                        <div class="spinner-border text-primary" role="status">
+                            <span class="visually-hidden">Loading...</span>
+                        </div>
+                        <p class="mt-3">Loading upcoming matches...</p>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div class="col-md-6">
+        <div class="card">
+            <div class="card-header">
+                <h5 class="mb-0">Recent Results</h5>
+            </div>
+            <div class="card-body">
+                <div id="past-matches">
+                    <div class="text-center py-3">
+                        <div class="spinner-border text-primary" role="status">
+                            <span class="visually-hidden">Loading...</span>
+                        </div>
+                        <p class="mt-3">Loading recent results...</p>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<div class="row mt-4">
+    <div class="col-12">
+        <div class="card">
+            <div class="card-header">
+                <h5 class="mb-0">Squad</h5>
+            </div>
+            <div class="card-body">
+                <div id="squad-container">
+                    <div class="text-center py-3">
+                        <div class="spinner-border text-primary" role="status">
+                            <span class="visually-hidden">Loading...</span>
+                        </div>
+                        <p class="mt-3">Loading squad information...</p>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+    // Get team ID from URL
+    const teamId = parseInt('{{ team_id }}');
+
+    // Connect to Socket.IO server
+    const socket = io();
+
+    // Handle connection
+    socket.on('connected', function(data) {
+        console.log('Connected to server');
+        // Fetch initial data
+        fetchTeamData();
+        fetchTeamMatches();
+    });
+
+    // Fetch team data from API
+    function fetchTeamData() {
+        fetch(`/api/team/${teamId}`)
+            .then(response => {
+                if (!response.ok) {
+                    throw new Error('Team not found');
+                }
+                return response.json();
+            })
+            .then(data => {
+                updateTeamInfo(data);
+                updateSquadInfo(data);
+            })
+            .catch(error => {
+                console.error('Error fetching team data:', error);
+                document.getElementById('team-info').innerHTML = `
+                    <div class="alert alert-danger">
+                        Failed to load team data. The team may not exist or there was an error fetching the data.
+                        <br><a href="/" class="btn btn-primary mt-3">Back to Dashboard</a>
+                    </div>
+                `;
+            });
+    }
+
+    // Fetch team matches from API
+    function fetchTeamMatches() {
+        fetch(`/api/team/${teamId}/matches`)
+            .then(response => {
+                if (!response.ok) {
+                    throw new Error('Team matches not found');
+                }
+                return response.json();
+            })
+            .then(data => {
+                updateUpcomingMatches(data.upcoming);
+                updatePastMatches(data.past);
+            })
+            .catch(error => {
+                console.error('Error fetching team matches:', error);
+                document.getElementById('upcoming-matches').innerHTML = `
+                    <div class="alert alert-danger">
+                        Failed to load team matches.
+                    </div>
+                `;
+                document.getElementById('past-matches').innerHTML = `
+                    <div class="alert alert-danger">
+                        Failed to load team matches.
+                    </div>
+                `;
+            });
+    }
+
+    // Update team information
+    function updateTeamInfo(team) {
+        // Update page title
+        document.title = `${team.name} - Football Analytics`;
+
+        // Update team name in header
+        document.getElementById('team-name').textContent = team.name;
+
+        // Update last updated time
+        document.getElementById('last-updated').textContent = new Date().toLocaleString();
+
+        // Create team info HTML
+        let html = `
+            <div class="row">
+                <div class="col-md-4 text-center">
+                    <img src="${team.crest}" alt="${team.name}" class="img-fluid mb-3" style="max-height: 200px;">
+                </div>
+                <div class="col-md-8">
+                    <h3>${team.name} <small class="text-muted">(${team.tla})</small></h3>
+                    <p><strong>Founded:</strong> ${team.founded}</p>
+                    <p><strong>Stadium:</strong> ${team.venue}</p>
+                    <p><strong>Club Colors:</strong> ${team.clubColors}</p>
+                    <p><strong>Address:</strong> ${team.address}</p>
+                    <p><strong>Website:</strong> <a href="${team.website}" target="_blank">${team.website}</a></p>
+                </div>
+            </div>
+
+            <div class="row mt-4">
+                <div class="col-12">
+                    <h4>Current Competitions</h4>
+                    <div class="row">
+        `;
+
+        // Add competitions
+        team.runningCompetitions.forEach(competition => {
+            html += `
+                <div class="col-md-4 mb-3">
+                    <div class="card h-100">
+                        <div class="card-body text-center">
+                            <img src="${competition.emblem}" alt="${competition.name}" class="img-fluid mb-2" style="max-height: 50px;">
+                            <h5>${competition.name}</h5>
+                            <span class="badge bg-secondary">${competition.type}</span>
+                        </div>
+                    </div>
+                </div>
+            `;
+        });
+
+        html += `
+                    </div>
+                </div>
+            </div>
+        `;
+
+        // Add coach information if available
+        if (team.coach && team.coach.name) {
+            html += `
+                <div class="row mt-4">
+                    <div class="col-12">
+                        <h4>Coach</h4>
+                        <div class="card">
+                            <div class="card-body">
+                                <div class="row">
+                                    <div class="col-md-6">
+                                        <p><strong>Name:</strong> ${team.coach.name}</p>
+                                        <p><strong>Nationality:</strong> ${team.coach.nationality}</p>
+                                    </div>
+                                    <div class="col-md-6">
+                                        <p><strong>Date of Birth:</strong> ${team.coach.dateOfBirth}</p>
+                                        <p><strong>Contract:</strong> ${team.coach.contract.start} to ${team.coach.contract.until}</p>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            `;
+        }
+
+        document.getElementById('team-info').innerHTML = html;
+    }
+
+    // Update squad information
+    function updateSquadInfo(team) {
+        if (!team.squad || team.squad.length === 0) {
+            document.getElementById('squad-container').innerHTML = `
+                <div class="alert alert-info">
+                    No squad information available.
+                </div>
+            `;
+            return;
+        }
+
+        // Group players by position
+        const positions = {
+            'Goalkeeper': [],
+            'Defence': [],
+            'Midfield': [],
+            'Offence': []
+        };
+
+        team.squad.forEach(player => {
+            if (positions[player.position]) {
+                positions[player.position].push(player);
+            }
+        });
+
+        let html = `
+            <ul class="nav nav-tabs" id="squadTabs" role="tablist">
+                <li class="nav-item" role="presentation">
+                    <button class="nav-link active" id="goalkeepers-tab" data-bs-toggle="tab" data-bs-target="#goalkeepers" type="button" role="tab" aria-controls="goalkeepers" aria-selected="true">Goalkeepers</button>
+                </li>
+                <li class="nav-item" role="presentation">
+                    <button class="nav-link" id="defenders-tab" data-bs-toggle="tab" data-bs-target="#defenders" type="button" role="tab" aria-controls="defenders" aria-selected="false">Defenders</button>
+                </li>
+                <li class="nav-item" role="presentation">
+                    <button class="nav-link" id="midfielders-tab" data-bs-toggle="tab" data-bs-target="#midfielders" type="button" role="tab" aria-controls="midfielders" aria-selected="false">Midfielders</button>
+                </li>
+                <li class="nav-item" role="presentation">
+                    <button class="nav-link" id="forwards-tab" data-bs-toggle="tab" data-bs-target="#forwards" type="button" role="tab" aria-controls="forwards" aria-selected="false">Forwards</button>
+                </li>
+            </ul>
+            <div class="tab-content mt-3" id="squadTabsContent">
+        `;
+
+        // Goalkeepers
+        html += `
+            <div class="tab-pane fade show active" id="goalkeepers" role="tabpanel" aria-labelledby="goalkeepers-tab">
+                <div class="table-responsive">
+                    <table class="table table-striped">
+                        <thead>
+                            <tr>
+                                <th>Name</th>
+                                <th>Number</th>
+                                <th>Nationality</th>
+                                <th>Date of Birth</th>
+                                <th>Contract</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+        `;
+
+        positions['Goalkeeper'].forEach(player => {
+            html += `
+                <tr>
+                    <td>${player.name}</td>
+                    <td>${player.shirtNumber || '-'}</td>
+                    <td>${player.nationality}</td>
+                    <td>${player.dateOfBirth}</td>
+                    <td>${player.contract ? `${player.contract.start} to ${player.contract.until}` : '-'}</td>
+                </tr>
+            `;
+        });
+
+        html += `
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        `;
+
+        // Defenders
+        html += `
+            <div class="tab-pane fade" id="defenders" role="tabpanel" aria-labelledby="defenders-tab">
+                <div class="table-responsive">
+                    <table class="table table-striped">
+                        <thead>
+                            <tr>
+                                <th>Name</th>
+                                <th>Number</th>
+                                <th>Nationality</th>
+                                <th>Date of Birth</th>
+                                <th>Contract</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+        `;
+
+        positions['Defence'].forEach(player => {
+            html += `
+                <tr>
+                    <td>${player.name}</td>
+                    <td>${player.shirtNumber || '-'}</td>
+                    <td>${player.nationality}</td>
+                    <td>${player.dateOfBirth}</td>
+                    <td>${player.contract ? `${player.contract.start} to ${player.contract.until}` : '-'}</td>
+                </tr>
+            `;
+        });
+
+        html += `
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        `;
+
+        // Midfielders
+        html += `
+            <div class="tab-pane fade" id="midfielders" role="tabpanel" aria-labelledby="midfielders-tab">
+                <div class="table-responsive">
+                    <table class="table table-striped">
+                        <thead>
+                            <tr>
+                                <th>Name</th>
+                                <th>Number</th>
+                                <th>Nationality</th>
+                                <th>Date of Birth</th>
+                                <th>Contract</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+        `;
+
+        positions['Midfield'].forEach(player => {
+            html += `
+                <tr>
+                    <td>${player.name}</td>
+                    <td>${player.shirtNumber || '-'}</td>
+                    <td>${player.nationality}</td>
+                    <td>${player.dateOfBirth}</td>
+                    <td>${player.contract ? `${player.contract.start} to ${player.contract.until}` : '-'}</td>
+                </tr>
+            `;
+        });
+
+        html += `
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        `;
+
+        // Forwards
+        html += `
+            <div class="tab-pane fade" id="forwards" role="tabpanel" aria-labelledby="forwards-tab">
+                <div class="table-responsive">
+                    <table class="table table-striped">
+                        <thead>
+                            <tr>
+                                <th>Name</th>
+                                <th>Number</th>
+                                <th>Nationality</th>
+                                <th>Date of Birth</th>
+                                <th>Contract</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+        `;
+
+        positions['Offence'].forEach(player => {
+            html += `
+                <tr>
+                    <td>${player.name}</td>
+                    <td>${player.shirtNumber || '-'}</td>
+                    <td>${player.nationality}</td>
+                    <td>${player.dateOfBirth}</td>
+                    <td>${player.contract ? `${player.contract.start} to ${player.contract.until}` : '-'}</td>
+                </tr>
+            `;
+        });
+
+        html += `
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        `;
+
+        html += `</div>`;
+
+        document.getElementById('squad-container').innerHTML = html;
+    }
+
+    // Update upcoming matches
+    function updateUpcomingMatches(matches) {
+        if (!matches || matches.length === 0) {
+            document.getElementById('upcoming-matches').innerHTML = `
+                <div class="alert alert-info">
+                    No upcoming matches scheduled.
+                </div>
+            `;
+            return;
+        }
+
+        let html = '';
+
+        matches.forEach(match => {
+            // Parse the UTC date
+            const matchDate = new Date(match.utcDate);
+            const formattedDate = matchDate.toLocaleDateString() + ' ' + matchDate.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+
+            // Determine if this team is home or away
+            const isHome = match.homeTeam.id == teamId;
+            const opponent = isHome ? match.awayTeam.name : match.homeTeam.name;
+            const venue = isHome ? 'Home' : 'Away';
+
+            html += `
+                <div class="card mb-2">
+                    <div class="card-body">
+                        <div class="d-flex justify-content-between align-items-center">
+                            <div>
+                                <h6>${match.competition.name}</h6>
+                                <div>${formattedDate}</div>
+                                <div><span class="badge bg-info">${venue}</span> vs ${opponent}</div>
+                            </div>
+                            <div>
+                                <a href="/match/${match.id}" class="btn btn-sm btn-outline-primary">Details</a>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            `;
+        });
+
+        document.getElementById('upcoming-matches').innerHTML = html;
+    }
+
+    // Update past matches
+    function updatePastMatches(matches) {
+        if (!matches || matches.length === 0) {
+            document.getElementById('past-matches').innerHTML = `
+                <div class="alert alert-info">
+                    No recent matches found.
+                </div>
+            `;
+            return;
+        }
+
+        let html = '';
+
+        matches.forEach(match => {
+            // Parse the UTC date
+            const matchDate = new Date(match.utcDate);
+            const formattedDate = matchDate.toLocaleDateString();
+
+            // Determine if this team is home or away
+            const isHome = match.homeTeam.id == teamId;
+            const opponent = isHome ? match.awayTeam.name : match.homeTeam.name;
+            const venue = isHome ? 'Home' : 'Away';
+
+            // Get the score
+            const homeScore = match.score.fullTime.home;
+            const awayScore = match.score.fullTime.away;
+            const score = `${homeScore} - ${awayScore}`;
+
+            // Determine result (win, loss, draw)
+            let result = 'Draw';
+            let resultClass = 'bg-warning';
+
+            if (homeScore !== null && awayScore !== null) {
+                if (isHome) {
+                    if (homeScore > awayScore) {
+                        result = 'Win';
+                        resultClass = 'bg-success';
+                    } else if (homeScore < awayScore) {
+                        result = 'Loss';
+                        resultClass = 'bg-danger';
+                    }
+                } else {
+                    if (homeScore < awayScore) {
+                        result = 'Win';
+                        resultClass = 'bg-success';
+                    } else if (homeScore > awayScore) {
+                        result = 'Loss';
+                        resultClass = 'bg-danger';
+                    }
+                }
+            }
+
+            html += `
+                <div class="card mb-2">
+                    <div class="card-body">
+                        <div class="d-flex justify-content-between align-items-center">
+                            <div>
+                                <h6>${match.competition.name}</h6>
+                                <div>${formattedDate}</div>
+                                <div><span class="badge bg-info">${venue}</span> vs ${opponent}</div>
+                            </div>
+                            <div class="text-center">
+                                <div class="score">${score}</div>
+                                <span class="badge ${resultClass}">${result}</span>
+                            </div>
+                            <div>
+                                <a href="/match/${match.id}" class="btn btn-sm btn-outline-primary">Details</a>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            `;
+        });
+
+        document.getElementById('past-matches').innerHTML = html;
+    }
+
+    // Refresh data every 5 minutes as a fallback
+    setInterval(fetchTeamData, 300000);
+    setInterval(fetchTeamMatches, 300000);
+</script>
+{% endblock %}

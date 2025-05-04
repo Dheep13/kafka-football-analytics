@@ -1,0 +1,20 @@
+# API and HTTP
+requests==2.31.0
+python-dotenv==1.0.0
+
+# Kafka
+kafka-python==2.0.2
+
+# Data processing
+pandas==2.0.3
+numpy==1.24.3
+
+# Web dashboard
+flask==2.3.3
+flask-socketio==5.3.4
+
+# Visualization
+plotly==5.16.1
+
+# Utilities
+python-dateutil==2.8.2

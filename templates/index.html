@@ -1,0 +1,278 @@
+{% extends "layout.html" %}
+
+{% block title %}Live Football Matches{% endblock %}
+
+{% block content %}
+<div class="row">
+    <div class="col-12">
+        <div class="card">
+            <div class="card-header d-flex justify-content-between align-items-center">
+                <h5 class="mb-0">Live Matches</h5>
+                <div>
+                    <span class="live-indicator"></span>
+                    <small>Live Updates</small>
+                </div>
+            </div>
+            <div class="card-body">
+                <div id="live-matches-container" class="row">
+                    <div class="col-12 text-center py-5">
+                        <div class="spinner-border text-primary" role="status">
+                            <span class="visually-hidden">Loading...</span>
+                        </div>
+                        <p class="mt-3">Loading live matches...</p>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<div class="row">
+    <div class="col-12">
+        <div class="card">
+            <div class="card-header d-flex justify-content-between align-items-center">
+                <h5 class="mb-0">Upcoming Matches</h5>
+            </div>
+            <div class="card-body">
+                <div id="upcoming-matches-container" class="row">
+                    <div class="col-12 text-center py-5">
+                        <div class="spinner-border text-primary" role="status">
+                            <span class="visually-hidden">Loading...</span>
+                        </div>
+                        <p class="mt-3">Loading upcoming matches...</p>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<div class="row">
+    <div class="col-12">
+        <div class="card">
+            <div class="card-header">
+                <h5 class="mb-0">About This Dashboard</h5>
+            </div>
+            <div class="card-body">
+                <p>This dashboard shows live and upcoming football matches from the Premier League.</p>
+                <p>If no live matches are displayed, it could be due to one of the following reasons:</p>
+                <ul>
+                    <li>There are no live football matches currently in progress.</li>
+                    <li>The data collector is still initializing and fetching data from the APIs.</li>
+                    <li>API rate limits may have been reached. The free tier of the APIs has limited requests.</li>
+                </ul>
+                <p><strong>Note:</strong> Due to API rate limits, we're currently only tracking Premier League matches.</p>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+    // Connect to Socket.IO server
+    const socket = io();
+
+    // Handle connection
+    socket.on('connected', function(data) {
+        console.log('Connected to server');
+        // Fetch initial data
+        fetchLiveMatches();
+        fetchUpcomingMatches();
+    });
+
+    // Handle live matches updates
+    socket.on('live_matches_update', function(data) {
+        updateLiveMatches(JSON.parse(data));
+    });
+
+    // Handle upcoming matches updates
+    socket.on('upcoming_matches_update', function(data) {
+        updateUpcomingMatches(JSON.parse(data));
+    });
+
+    // Fetch live matches from API
+    function fetchLiveMatches() {
+        fetch('/api/matches/live')
+            .then(response => response.json())
+            .then(data => {
+                updateLiveMatches(data);
+            })
+            .catch(error => {
+                console.error('Error fetching live matches:', error);
+                document.getElementById('live-matches-container').innerHTML = `
+                    <div class="col-12 text-center py-3">
+                        <div class="alert alert-danger">
+                            Failed to load live matches. Please try again later.
+                        </div>
+                    </div>
+                `;
+            });
+    }
+
+    // Fetch upcoming matches from API
+    function fetchUpcomingMatches() {
+        fetch('/api/matches/upcoming')
+            .then(response => response.json())
+            .then(data => {
+                updateUpcomingMatches(data);
+            })
+            .catch(error => {
+                console.error('Error fetching upcoming matches:', error);
+                document.getElementById('upcoming-matches-container').innerHTML = `
+                    <div class="col-12 text-center py-3">
+                        <div class="alert alert-danger">
+                            Failed to load upcoming matches. Please try again later.
+                        </div>
+                    </div>
+                `;
+            });
+    }
+
+    // Update live matches display
+    function updateLiveMatches(data) {
+        const container = document.getElementById('live-matches-container');
+        const matches = data.matches || [];
+
+        if (!matches || matches.length === 0) {
+            container.innerHTML = `
+                <div class="col-12 text-center py-3">
+                    <div class="alert alert-info">
+                        No live matches currently in progress. Check back later!
+                    </div>
+                </div>
+            `;
+            return;
+        }
+
+        let html = '';
+
+        matches.forEach(match => {
+            // Extract match details from the API response
+            const competition = match.competition ? match.competition.name : 'Unknown';
+            const homeTeam = match.homeTeam ? match.homeTeam.name : 'Unknown';
+            const homeTeamId = match.homeTeam ? match.homeTeam.id : 0;
+            const awayTeam = match.awayTeam ? match.awayTeam.name : 'Unknown';
+            const awayTeamId = match.awayTeam ? match.awayTeam.id : 0;
+            const status = match.status || 'UNKNOWN';
+            const matchId = match.id || 0;
+
+            // Format score
+            let score = 'vs';
+            if (match.score && match.score.fullTime) {
+                const homeScore = match.score.fullTime.home !== null ? match.score.fullTime.home : 0;
+                const awayScore = match.score.fullTime.away !== null ? match.score.fullTime.away : 0;
+                score = `${homeScore} - ${awayScore}`;
+            }
+
+            html += `
+                <div class="col-md-6 col-lg-4 mb-4">
+                    <div class="card match-card h-100">
+                        <div class="card-header">
+                            <div class="d-flex justify-content-between align-items-center">
+                                <span>${competition}</span>
+                                <span><span class="live-indicator"></span> LIVE</span>
+                            </div>
+                        </div>
+                        <div class="card-body">
+                            <div class="text-center mb-3">
+                                <div class="d-flex justify-content-between align-items-center mb-2">
+                                    <div class="text-end" style="width: 40%;">
+                                        <a href="/team/${homeTeamId}" class="text-decoration-none">
+                                            <strong>${homeTeam}</strong>
+                                        </a>
+                                    </div>
+                                    <div class="score px-3">${score}</div>
+                                    <div class="text-start" style="width: 40%;">
+                                        <a href="/team/${awayTeamId}" class="text-decoration-none">
+                                            <strong>${awayTeam}</strong>
+                                        </a>
+                                    </div>
+                                </div>
+                                <div class="badge bg-danger">${status}</div>
+                            </div>
+                            <div class="text-center">
+                                <a href="/match/${matchId}" class="btn btn-primary">View Analysis</a>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            `;
+        });
+
+        container.innerHTML = html;
+    }
+
+    // Update upcoming matches display
+    function updateUpcomingMatches(data) {
+        const container = document.getElementById('upcoming-matches-container');
+        const matches = data.matches || [];
+
+        if (!matches || matches.length === 0) {
+            container.innerHTML = `
+                <div class="col-12 text-center py-3">
+                    <div class="alert alert-info">
+                        No upcoming matches found. Check back later!
+                    </div>
+                </div>
+            `;
+            return;
+        }
+
+        let html = '';
+
+        matches.forEach(match => {
+            // Extract match details from the API response
+            const competition = match.competition ? match.competition.name : 'Unknown';
+            const homeTeam = match.homeTeam ? match.homeTeam.name : 'Unknown';
+            const homeTeamId = match.homeTeam ? match.homeTeam.id : 0;
+            const awayTeam = match.awayTeam ? match.awayTeam.name : 'Unknown';
+            const awayTeamId = match.awayTeam ? match.awayTeam.id : 0;
+
+            // Format date
+            let matchDate = 'TBD';
+            if (match.utcDate) {
+                const date = new Date(match.utcDate);
+                matchDate = date.toLocaleString();
+            }
+
+            html += `
+                <div class="col-md-6 col-lg-4 mb-4">
+                    <div class="card match-card h-100">
+                        <div class="card-header">
+                            <div class="d-flex justify-content-between align-items-center">
+                                <span>${competition}</span>
+                                <span class="badge bg-info">UPCOMING</span>
+                            </div>
+                        </div>
+                        <div class="card-body">
+                            <div class="text-center mb-3">
+                                <div class="d-flex justify-content-between align-items-center mb-2">
+                                    <div class="text-end" style="width: 40%;">
+                                        <a href="/team/${homeTeamId}" class="text-decoration-none">
+                                            <strong>${homeTeam}</strong>
+                                        </a>
+                                    </div>
+                                    <div class="px-3">vs</div>
+                                    <div class="text-start" style="width: 40%;">
+                                        <a href="/team/${awayTeamId}" class="text-decoration-none">
+                                            <strong>${awayTeam}</strong>
+                                        </a>
+                                    </div>
+                                </div>
+                                <div class="badge bg-secondary">${matchDate}</div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            `;
+        });
+
+        container.innerHTML = html;
+    }
+
+    // Refresh data every 5 minutes as a fallback
+    setInterval(fetchLiveMatches, 300000);
+    setInterval(fetchUpcomingMatches, 300000);
+</script>
+{% endblock %}

@@ -1,0 +1,319 @@
+{% extends "layout.html" %}
+
+{% block title %}Football Analytics - Metrics Dashboard{% endblock %}
+
+{% block head %}
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0-beta3/css/all.min.css">
+<style>
+    .metric-value {
+        font-size: 24px;
+        font-weight: bold;
+    }
+    .metric-label {
+        font-size: 14px;
+        color: #6c757d;
+    }
+    .window-card {
+        background-color: #f1f8ff;
+    }
+    .refresh-btn {
+        margin-bottom: 20px;
+    }
+    pre {
+        background-color: #f8f9fa;
+        padding: 15px;
+        border-radius: 5px;
+        max-height: 400px;
+        overflow-y: auto;
+    }
+</style>
+{% endblock %}
+
+{% block content %}
+
+        <h1 class="mb-4">Big Data Metrics Dashboard</h1>
+
+        <div class="d-flex justify-content-between align-items-center mb-3">
+            <p class="text-muted">Real-time metrics from the Kafka-based football analytics platform</p>
+            <button id="refresh-btn" class="btn btn-primary refresh-btn">
+                <i class="fas fa-sync-alt me-2"></i>Refresh Metrics
+            </button>
+        </div>
+
+        <div class="row">
+            <!-- Key Metrics -->
+            <div class="col-md-6">
+                <div class="card">
+                    <div class="card-header">
+                        <i class="fas fa-tachometer-alt me-2"></i>Key Metrics
+                    </div>
+                    <div class="card-body">
+                        <div class="row" id="key-metrics-container">
+                            <div class="col-6 mb-3">
+                                <div class="metric-value" id="api-calls">-</div>
+                                <div class="metric-label">API Calls</div>
+                            </div>
+                            <div class="col-6 mb-3">
+                                <div class="metric-value" id="kafka-messages">-</div>
+                                <div class="metric-label">Kafka Messages</div>
+                            </div>
+                            <div class="col-6 mb-3">
+                                <div class="metric-value" id="message-rate">-</div>
+                                <div class="metric-label">Messages/sec</div>
+                            </div>
+                            <div class="col-6 mb-3">
+                                <div class="metric-value" id="avg-processing-time">-</div>
+                                <div class="metric-label">Avg Processing Time (ms)</div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Data Counts -->
+            <div class="col-md-6">
+                <div class="card">
+                    <div class="card-header">
+                        <i class="fas fa-database me-2"></i>Data Counts
+                    </div>
+                    <div class="card-body">
+                        <div class="row" id="data-counts-container">
+                            <div class="col-6 mb-3">
+                                <div class="metric-value" id="matches-count">-</div>
+                                <div class="metric-label">Matches</div>
+                            </div>
+                            <div class="col-6 mb-3">
+                                <div class="metric-value" id="live-matches-count">-</div>
+                                <div class="metric-label">Live Matches</div>
+                            </div>
+                            <div class="col-6 mb-3">
+                                <div class="metric-value" id="errors-count">-</div>
+                                <div class="metric-label">Errors</div>
+                            </div>
+                            <div class="col-6 mb-3">
+                                <div class="metric-value" id="window-count">-</div>
+                                <div class="metric-label">Processed Windows</div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Tumbling Windows -->
+        <div class="card mt-4">
+            <div class="card-header">
+                <i class="fas fa-clock me-2"></i>Tumbling Windows (5-minute)
+            </div>
+            <div class="card-body">
+                <div id="windows-container">
+                    <div class="alert alert-info">Loading window data...</div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Aggregated Metrics -->
+        <div class="card mt-4">
+            <div class="card-header">
+                <i class="fas fa-chart-bar me-2"></i>Aggregated Metrics (Last Hour)
+            </div>
+            <div class="card-body">
+                <div id="aggregated-metrics-container">
+                    <div class="alert alert-info">Loading aggregated metrics...</div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Raw Metrics -->
+        <div class="card mt-4">
+            <div class="card-header">
+                <i class="fas fa-code me-2"></i>Raw Metrics Data
+            </div>
+            <div class="card-body">
+                <pre id="raw-metrics">Loading raw metrics data...</pre>
+            </div>
+        </div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+    // Fetch metrics data
+    function fetchMetrics() {
+        fetch('/api/metrics')
+            .then(response => response.json())
+            .then(data => {
+                updateKeyMetrics(data);
+                updateDataCounts(data);
+                document.getElementById('raw-metrics').textContent = JSON.stringify(data, null, 2);
+            })
+            .catch(error => {
+                console.error('Error fetching metrics:', error);
+            });
+    }
+
+    // Fetch window data
+    function fetchWindows() {
+        fetch('/api/windows')
+            .then(response => response.json())
+            .then(data => {
+                updateWindows(data);
+            })
+            .catch(error => {
+                console.error('Error fetching windows:', error);
+            });
+    }
+
+    // Fetch aggregated window metrics
+    function fetchAggregatedMetrics() {
+        fetch('/api/windows/aggregated')
+            .then(response => response.json())
+            .then(data => {
+                updateAggregatedMetrics(data);
+            })
+            .catch(error => {
+                console.error('Error fetching aggregated metrics:', error);
+            });
+    }
+
+    // Update key metrics
+    function updateKeyMetrics(data) {
+        document.getElementById('api-calls').textContent = data.api_calls.total || 0;
+        document.getElementById('kafka-messages').textContent = data.kafka_messages.total || 0;
+        document.getElementById('message-rate').textContent = (data.message_rates.total || 0).toFixed(2);
+
+        // Calculate average processing time across all operations
+        let totalTime = 0;
+        let count = 0;
+        for (const [operation, time] of Object.entries(data.avg_processing_times)) {
+            totalTime += time;
+            count++;
+        }
+        const avgTime = count > 0 ? (totalTime / count).toFixed(2) : 0;
+        document.getElementById('avg-processing-time').textContent = avgTime;
+    }
+
+    // Update data counts
+    function updateDataCounts(data) {
+        document.getElementById('matches-count').textContent = data.data_counts.matches || 0;
+        document.getElementById('errors-count').textContent = data.error_counts.total || 0;
+    }
+
+    // Update windows display
+    function updateWindows(windows) {
+        const container = document.getElementById('windows-container');
+
+        if (!windows || windows.length === 0) {
+            container.innerHTML = `<div class="alert alert-info">No window data available yet.</div>`;
+            document.getElementById('window-count').textContent = 0;
+            return;
+        }
+
+        document.getElementById('window-count').textContent = windows.length;
+
+        let html = '<div class="row">';
+
+        windows.forEach((window, index) => {
+            const matchUpdates = window.metrics.match_update?.count || 0;
+            const liveMatches = window.metrics.live_match?.count || 0;
+
+            html += `
+                <div class="col-md-6 mb-3">
+                    <div class="card window-card h-100">
+                        <div class="card-header">
+                            Window ${index + 1}: ${window.window_start_time} to ${window.window_end_time}
+                        </div>
+                        <div class="card-body">
+                            <div class="row">
+                                <div class="col-6">
+                                    <div class="metric-value">${matchUpdates}</div>
+                                    <div class="metric-label">Match Updates</div>
+                                </div>
+                                <div class="col-6">
+                                    <div class="metric-value">${liveMatches}</div>
+                                    <div class="metric-label">Live Matches</div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            `;
+        });
+
+        html += '</div>';
+        container.innerHTML = html;
+    }
+
+    // Update aggregated metrics
+    function updateAggregatedMetrics(data) {
+        const container = document.getElementById('aggregated-metrics-container');
+
+        if (!data || !data.metrics) {
+            container.innerHTML = `<div class="alert alert-info">No aggregated metrics available yet.</div>`;
+            return;
+        }
+
+        const matchUpdates = data.metrics.match_update?.count || 0;
+        const liveMatches = data.metrics.live_match?.count || 0;
+        const finishedMatches = data.metrics.finished_match?.count || 0;
+
+        // Update live matches count
+        document.getElementById('live-matches-count').textContent = liveMatches;
+
+        let html = `
+            <div class="row">
+                <div class="col-md-4">
+                    <div class="card bg-light">
+                        <div class="card-body text-center">
+                            <h3>${matchUpdates}</h3>
+                            <p>Match Updates</p>
+                        </div>
+                    </div>
+                </div>
+                <div class="col-md-4">
+                    <div class="card bg-light">
+                        <div class="card-body text-center">
+                            <h3>${liveMatches}</h3>
+                            <p>Live Matches</p>
+                        </div>
+                    </div>
+                </div>
+                <div class="col-md-4">
+                    <div class="card bg-light">
+                        <div class="card-body text-center">
+                            <h3>${finishedMatches}</h3>
+                            <p>Finished Matches</p>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <div class="mt-3">
+                <p><strong>Time Range:</strong> ${data.start_time} to ${data.end_time}</p>
+                <p><strong>Windows Aggregated:</strong> ${data.num_windows}</p>
+                <p><strong>Window Size:</strong> ${data.window_size_seconds} seconds</p>
+            </div>
+        `;
+
+        container.innerHTML = html;
+    }
+
+    // Initial load
+    fetchMetrics();
+    fetchWindows();
+    fetchAggregatedMetrics();
+
+    // Set up refresh button
+    document.getElementById('refresh-btn').addEventListener('click', function() {
+        fetchMetrics();
+        fetchWindows();
+        fetchAggregatedMetrics();
+    });
+
+    // Auto-refresh every 30 seconds
+    setInterval(function() {
+        fetchMetrics();
+        fetchWindows();
+        fetchAggregatedMetrics();
+    }, 30000);
+</script>
+{% endblock %}
