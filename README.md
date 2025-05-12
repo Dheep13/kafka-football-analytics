@@ -2,6 +2,8 @@
 
 A real-time football analytics application that uses free football APIs, Kafka for data streaming, and a Flask web dashboard for visualization.
 
+Explore the design and overview of the application [here](https://superlative-narwhal-eecedf.netlify.app/)
+
 ## Features
 
 - **Real-time match tracking**
